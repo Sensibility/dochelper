@@ -1,3 +1,6 @@
+## Binary-format sublime files
+*.sublime-workspace
+
 ## Python compiled object code
 *.pyo
 *.pyc
