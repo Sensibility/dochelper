@@ -1,0 +1,9 @@
+{
+	"folders":
+	[
+		{
+			"path": ".",
+			"file_exclude_patterns": [".gitignore", "*.out", "*.aux", "*.log", "*.synte*", "*.fls", "*.sublime-*"]
+		}
+	]
+}
