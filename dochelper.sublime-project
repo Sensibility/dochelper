@@ -3,7 +3,7 @@
 	[
 		{
 			"path": ".",
-			"file_exclude_patterns": [".gitignore", "*.out", "*.aux", "*.log", "*.synte*", "*.fls", "*.sublime-*"]
+			"file_exclude_patterns": [".gitignore", "*.out", "*.aux", "*.log", "*.syntex", "*.syntex.gz", "*.syntex(busy)", "*.syntex.gz(busy)", "*.fls", "*.sublime-*", "*.swp", "*.lot", "*.toc", "*.fmt", "*.fot", "*.cb", "*.cb2", "*.pdfsync", "*.fdb_latexmk", "*."]
 		}
 	]
 }
