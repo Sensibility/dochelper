@@ -1,3 +1,11 @@
+## Python compiled object code
+*.pyo
+*.pyc
+*.pyd
+
+## Python Cached object code directories
+**/__pycache__/
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
