@@ -8,11 +8,16 @@
 \RequirePackage{xcolor}
 \RequirePackage{listings}
 \RequirePackage{fontspec}
+\RequirePackage{tcolorbox}
+\RequirePackage[margin=1in]{geometry}
 %\RequirePackage{hyperref}
 
 %sets the default fonts
 \setmainfont{Ubuntu}
 \setmonofont{Ubuntu Mono}
+
+%sets paragraph style to value contiguous command output over constant line width.
+\AtBeginDocument{\raggedright}
 
 %Define some colors
 \definecolor{orchid}{HTML}{F92672}
@@ -29,8 +34,10 @@
 \definecolor{numberconst}{rgb}{0.58,0,0.82}
 \definecolor{identifier}{rgb}{0.1,0.6,0.1}
 
-%Inline python code
-\DeclareRobustCommand{\pycode}[1]{\lstinline[identifierstyle=\color{numberconst},keywordstyle=\color{numberconst},mathescape=false]$#1$}
+% Inline code markup
+\newtcbox{\@code}{nobeforeafter,colback=sundriedClay,boxsep=0pt,left=6pt,right=6pt,top=2pt,bottom=1pt,tcbox raise base}
+
+\DeclareRobustCommand{\code}[1]{\@code{\small\ttfamily\color{orchid}#1}}
 
 \lstset{% Lets the style for numeric constants and keyword groups
    backgroundcolor=\color{sundriedClay},
