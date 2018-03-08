@@ -9,6 +9,9 @@
 ## Python Cached object code directories
 **/__pycache__/
 
+## Setuptools 'egg' stuff
+*.egg-info
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
