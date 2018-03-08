@@ -7,13 +7,14 @@ https://github.com/pypa/sampleproject
 # To use a consistent encoding
 import codecs
 import os
+import sys
 import subprocess
 
 # Always prefer setuptools over distutils
 from setuptools import setup
 
 # Before doing anything, check for a texlive installation.
-texmfHome = subprocess.run(["kpsewhich", "-var-value=TEXMFHOME"])
+texmfHome = subprocess.run(["kpsewhich", "-var-value=TEXMFHOME"], stdout=subprocess.PIPE)
 
 try:
 	texmfHome.check_returncode()
@@ -24,7 +25,7 @@ except subprocess.CalledProcessError:
 
 # Create the documentation class directory (if it does not already exist)
 try:
-	packagePath = os.path.join(texmfHome.stdout.decode(), 'tex', 'latex', 'documentation')
+	packagePath = os.path.join(texmfHome.stdout.decode().strip(), 'tex', 'latex', 'documentation')
 	os.makedirs(packagePath)
 
 # output couldn't be decoded
@@ -50,6 +51,10 @@ except OSError as e:
 	exit(2)
 
 here = os.path.abspath(os.path.dirname(__file__))
+
+with open(os.path.join(here, 'documentation.cls')) as docfile:
+	with open(os.path.join(packagePath, 'documentation.cls'), 'w') as outputfile:
+		outputfile.write(docfile.read())
 
 # Get the long description from the README file
 with codecs.open(os.path.join(here, 'README.rst'), encoding='utf-8') as f:
