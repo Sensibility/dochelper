@@ -52,7 +52,7 @@ def getContiguousComment(syntax:str, contents:typing.List[str])->typing.Optional
 					raise EOFError("EOF encountered while scanning block comment.")
 
 
-			return [ x for x in contiguousComment if x ]
+			return [ x.replace('_', r'\_') for x in contiguousComment if x ]
 	return None
 
 
@@ -103,7 +103,8 @@ def extractPythonDocumentation(moduleName: str, contents: str) -> str:
 	"""
 	global ASSIGNMENT_PATTERNS, FUNCTION_PROCESSORS
 
-	latex = [r"\subsection{%s}\label{sec:py:%s}" % (moduleName, moduleName)]
+
+	latex = [r"\subsection{%s}\label{sec:py:%s}" % (moduleName.replace('_', r'\_'), moduleName.replace('_', 'UnDeRsCoRe'))]
 
 	# Get all lines that are not empty or just whitespace (and eliminate trailing whitespace)
 	contentLines = []
@@ -151,19 +152,19 @@ def extractPythonDocumentation(moduleName: str, contents: str) -> str:
 			processedLines += len(comments)
 
 	if constants:
-		latex.append(r"\subsubsection{Constants}\label{sec:py:%s:constants}" % moduleName)
+		latex.append(r"\subsubsection{Constants}\label{sec:py:%s:constants}" % moduleName.replace('_', 'UnDeRsCoRe'))
 		latex.append(r"\begin{itemize}")
 		for constant in sorted(constants):
-			latex.append(r"\item{}\lstinline{%s}\\" % constant)
+			latex.append(r"\item{}\code{%s}\\" % constant)
 			latex.append("\t%s\\\\" % constants[constant])
 
 		latex.append(r"\end{itemize}")
 
 	if functions:
-		latex.append(r"\subsubsection{Functions})\label{sec:py:%s:funcs}" % moduleName)
+		latex.append(r"\subsubsection{Functions}\label{sec:py:%s:funcs}" % moduleName.replace('_', 'UnDeRsCoRe'))
 		latex.append(r"\begin{itemize}")
 		for func in sorted(functions):
-			latex.append(r"\item{}\lstinline{%s}\\" % func)
+			latex.append(r"\item{}\code{%s}\\" % func)
 			latex.append("\t%s\\\\" % functions[func])
 
 		latex.append(r"\end{itemize}")
@@ -254,16 +255,19 @@ def main():
 	for module in modules:
 		try:
 			fname, output = handleFile(module)
+			#output = output.replace('_', r'\_')
 		except EOFError as e:
 			print(e, file=sys.stderr)
+		except Exception as e:
+			print("Generic Error:", e, file=sys.stderr)
 		else:
 			with open(os.path.join(outputDir, fname), 'w') as outfile:
 				outfile.write(output)
 
 			outputFiles.add(fname)
 
-	with open(os.path.join(outputDir, 'index.tex')) as idxfile:
-		idxfile.write('\n'.join(r"\include{%s}" % outputFile for outputFile in outputFiles))
+	with open(os.path.join(outputDir, 'index.tex'), 'w') as idxfile:
+		idxfile.write('\n'.join(r'\input{"%s/%s"}' % (outputDir, outputFile) for outputFile in outputFiles))
 
 	print("Done. Output in '%s' in files: " % outputDir)
 	for file in outputFiles:
