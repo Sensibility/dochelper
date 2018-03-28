@@ -106,6 +106,8 @@ stringstyle=\color{stringlit}\ttfamily
 % Don't put page numbers on the title page or table of contents
 \let\oldmaketitle\maketitle
 \renewcommand\maketitle{\pagenumbering{roman}\clearpage\oldmaketitle\thispagestyle{empty}}
-
 \let\oldtoc\tableofcontents
 \renewcommand\tableofcontents{\clearpage\oldtoc\thispagestyle{empty}\pagenumbering{arabic}\setcounter{page}{0}}
+
+% Names of things don't necessarily belong in a \code environment.
+\DeclareRobustCommand{\identifier}[1]{\texttt{\textcolor{orchid}{#1}}}

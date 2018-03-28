@@ -3,9 +3,11 @@
 A documentation generator for Python3 comments and docstrings.
 
 See the README.md for usage at https://github.com/Sensibility/dochelper
+BTW, this is riddled with inefficiencies. I'm filing all of that under "wontfix" for now.
 """
 import typing
 import re
+import sys
 
 # A mapping of syntax names to a list of tuples of delimeters that begin and end comments.
 # A 2-tuple represents a pair of delimeters meant to begin and subsequently end the comment,
@@ -14,6 +16,39 @@ COMMENT_DELIMS = {'Python': [("'''", "'''"), ('"""', '"""'), ('#',)]}
 
 # A mapping of syntax names to regex patterns that show assignment
 ASSIGNMENT_PATTERNS = {'Python': re.compile(r'[a-zA-Z_]\w*\s*=')}
+
+def processComment(comment: str) -> str:
+	"""
+	Processes a comment for things that should be interpreted in a special way.
+
+	Some day I'll detail the specifics, but it does markdown-like things like turning backticks
+	into inline code and underscores into italics.
+	"""
+	sugar = {'_': r'\textit{', '*': r'\textbf{', '`': r'\code{'}
+
+	# This stack is used to "solve" the dangling brace problem.
+	# Currently, it doesn't do that , as it doesn't solve double-nesting.
+	# Which you should never do anyway, since 'double bold font' isn't a thing.
+	braces = {'*': 0, '_': 0, '`': 0}
+
+	output = []
+	for i, char in enumerate(comment):
+		if char in sugar and i and comment[i-1] != '\\':
+			if braces[char]:
+				braces[char] -= 1
+				char = '}'
+			else:
+				braces[char] += 1
+				char = sugar[char]
+		output.append(char)
+
+	if any(braces.values()):
+		# need to forcibly close braces, then issue a warning
+		output += ['}']*sum(braces.values())
+		print("Warning!! Unterminated format specifier encountered!", file=sys.stderr)
+
+	return ''.join(output)
+
 
 def getContiguousComment(syntax:str, contents:typing.List[str])->typing.Optional[typing.List[str]]:
 	"""
@@ -66,16 +101,97 @@ def processPythonFunction(contents: typing.List[str]) -> typing.Tuple[str, str, 
 	global COMMENT_DELIMS
 
 	funcname = contents[0][4:].lstrip()
-	funcname = funcname[:funcname.index('(')].rstrip()
+	argsStart = funcname.index('(')
+	argsEnd = -(funcname[::-1].index(')')) - 1
+	if ',' in funcname[argsStart:argsEnd]:
+		args = [a.strip().replace("_", r"\_") for a in funcname[argsStart+1:argsEnd].split(',') if a]
+	else:
+		args = []
+	funcname = funcname[:argsStart].rstrip()
+
+	argslist = []
+	for arg in args:
+		thisArg = []
+		if ':' in arg:
+			thisArg.append(arg.split(':')[0].strip())
+			if '=' in arg:
+				lastParts = arg.split(':')[1].split('=')
+				thisArg += [part.strip() for part in lastParts if part]
+			else:
+				thisArg.append(arg.split(':')[1].strip())
+				thisArg.append(None)
+		elif '=' in arg:
+			parts = [part.strip() for part in arg.split('=') if part and part.strip()]
+			thisArg = (parts[0], None, parts[1])
+		else:
+			thisArg = (arg, None, None)
+		argslist.append(thisArg)
+
+	del args
+
+	try:
+		returnType = funcname.index("->", argsEnd)
+		returnType = funcname[returnType+1:].strip()[:-1].rstrip()
+	except ValueError:
+		returnType = None
 
 	docstring = getContiguousComment('Python', contents[1:])
 	if docstring is None:
 		docstring = ''
 
-	identRegex = []
-	for delim in COMMENT_DELIMS['Python']:
-		identRegex.append(delim[0])
-	identRegex = re.compile('|'.join(identRegex))
+	identRegex = re.compile(r'"""|#|%s' % "'''")
+
+	try:
+		indentation = contents[1][:identRegex.search(contents[1]).start()]
+	except AttributeError as e:
+		print(contents[1])
+		raise e
+
+	numLines = 1 + len(docstring)
+	for line in contents[numLines:]:
+		if not line.startswith(indentation):
+			break
+		numLines += 1
+
+	output = [processComment('\n'.join(docstring))]
+
+	if argslist:
+		output.append(r"\\\textbf{\textit{Arguments:}}")
+		output.append(r"\begin{itemize}")
+		for arg in argslist:
+			outarg = [r"\item{}\identifier{%s}" % arg[0]]
+			if arg[1] is not None:
+				outarg.append(r" - \identifier{%s}" % arg[1])
+			if arg[2] is not None:
+				outarg.append(r" - \textit{Default:} \identifier{%s}" % arg[2])
+			output.append(''.join(outarg))
+		output.append(r"\end{itemize}")
+
+	if returnType is not None:
+		output.append(r"\textbf{\textit{Returns:} %s" % returnType)
+
+	return funcname, '\n'.join(output), numLines
+
+
+def processPythonClass(contents: typing.List[str]) -> typing.Tuple[str, str, int]:
+	"""
+	Processes a Python class.
+
+	Returns the class name, the class docstring, and the number of lines contained in the class.
+	"""
+	# global COMMENT_DELIMS
+
+	clsName = contents[0][6:].lstrip()
+	try:
+		clsName = clsName[:clsName.index('(')].rstrip()
+	except ValueError:
+		raise ValueError("'(' not found in class decl on line '%s'" % contents[0])
+
+	docstring = getContiguousComment('Python', contents[1:])
+	if docstring is None:
+		docstring = ''
+
+	identRegex = re.compile(r'"""|#|%s' % "'''")
 
 	indentation = contents[1][:identRegex.search(contents[1]).start()]
 
@@ -85,11 +201,15 @@ def processPythonFunction(contents: typing.List[str]) -> typing.Tuple[str, str, 
 			break
 		numLines += 1
 
-	return funcname, docstring, numLines
+	return clsName, processComment('\n'.join(docstring)), numLines
 
 
 # A mapping of syntax names to functions that process functions for that syntax.
 FUNCTION_PROCESSORS = {'Python': processPythonFunction}
+
+# A mapping of syntax names to functions that process datatype declarations for that syntax.
+# Note that I don't support `collections` or `typing` `NewType`s/`NamedTuple`s
+DATATYPE_PROCESSORS = {'Python': processPythonClass}
 
 
 def extractPythonDocumentation(moduleName: str, contents: str) -> str:
@@ -103,21 +223,26 @@ def extractPythonDocumentation(moduleName: str, contents: str) -> str:
 	"""
 	global ASSIGNMENT_PATTERNS, FUNCTION_PROCESSORS
 
+	#Underscores are the bane of my existence
+	safeName = moduleName.replace('_', 'UnDeRsCoRe')
 
-	latex = [r"\subsection{%s}\label{sec:py:%s}" % (moduleName.replace('_', r'\_'), moduleName.replace('_', 'UnDeRsCoRe'))]
+	latex = [r"\subsection{%s}\label{sec:py:%s}" % (moduleName.replace('_', r'\_'), safeName)]
 
 	# Get all lines that are not empty or just whitespace (and eliminate trailing whitespace)
 	contentLines = []
 	currentLine = ''
 	for line in contents.strip().split('\n'):
 		if line and line.strip():
+			# I assume that lines ending with commas are continued tuples/argument lists
 			if line.endswith('\\'):
-				currentLine += line
+				currentLine += ' ' + line[:-1]
+			elif line.endswith(','):
+				currentLine += ' ' + line
 			else:
-				contentLines.append(currentLine + line)
+				contentLines.append((currentLine + line).strip())
 				currentLine = ''
 
-	contentLines = [x.rstrip() for x in contents.strip().split('\n') if x and x.strip()]
+	# contentLines = [x.rstrip() for x in contents.strip().split('\n') if x and x.strip()]
 
 	# Check for module docstring/top-level comments (first line could be shebang)
 	if contentLines[0].startswith("#!"):
@@ -126,18 +251,24 @@ def extractPythonDocumentation(moduleName: str, contents: str) -> str:
 	moduleDocstring = getContiguousComment('Python', contentLines)
 	processedLines = len(moduleDocstring)
 
-	latex.append('\n'.join(moduleDocstring))
+	latex.append(processComment('\n'.join(moduleDocstring)))
 
 	constants, functions, classes = {}, {}, {}
 	while processedLines < len(contentLines):
 		comments = getContiguousComment('Python', contentLines[processedLines:])
 		if comments is None:
-			print(contentLines[processedLines])
+			# print(contentLines[processedLines])
 			if contentLines[processedLines].startswith('def'):
 				funcname,\
 				docstring,\
 				containedLines = FUNCTION_PROCESSORS['Python'](contentLines[processedLines:])
-				functions[funcname] = '\n'.join(docstring)
+				functions[funcname] = docstring
+				processedLines += containedLines
+			elif contentLines[processedLines].startswith("class"):
+				classname,\
+				docstring,\
+				containedLines = DATATYPE_PROCESSORS['Python'](contentLines[processedLines:])
+				classes[classname] = docstring
 				processedLines += containedLines
 			elif ASSIGNMENT_PATTERNS['Python'].match(contentLines[processedLines]):
 				constants[contentLines[processedLines].split('=')[0].strip()] = ''
@@ -149,24 +280,33 @@ def extractPythonDocumentation(moduleName: str, contents: str) -> str:
 			constants[contentLines[processedLines].split('=')[0].strip()] = '\n'.join(comments)
 			processedLines += 1
 		else:
-			processedLines += len(comments)
+			processedLines += len(comments) if comments else 1 # This is a dirty hack. Much like the rest of the code
 
 	if constants:
-		latex.append(r"\subsubsection{Constants}\label{sec:py:%s:constants}" % moduleName.replace('_', 'UnDeRsCoRe'))
+		latex.append(r"\subsubsection{Constants}\label{sec:py:%s:constants}" % safeName)
 		latex.append(r"\begin{itemize}")
 		for constant in sorted(constants):
-			latex.append(r"\item{}\code{%s}\\" % constant)
-			latex.append("\t%s\\\\" % constants[constant])
+			latex.append(r"\item{}\identifier{%s}\\" % constant.replace('_', r'\_'))
+			if constants[constant]:
+				latex.append("\t%s\\\\" % constants[constant])
 
 		latex.append(r"\end{itemize}")
 
 	if functions:
-		latex.append(r"\subsubsection{Functions}\label{sec:py:%s:funcs}" % moduleName.replace('_', 'UnDeRsCoRe'))
+		latex.append(r"\subsubsection{Functions}\label{sec:py:%s:funcs}" % safeName)
 		latex.append(r"\begin{itemize}")
 		for func in sorted(functions):
-			latex.append(r"\item{}\code{%s}\\" % func)
+			latex.append(r"\item{}\identifier{%s}\\" % func.replace('_', r'\_'))
 			latex.append("\t%s\\\\" % functions[func])
 
+		latex.append(r"\end{itemize}")
+
+	if classes:
+		latex.append(r"\subsubsection{Classes}\label{sec:py:%s:classes}" % safeName)
+		latex.append(r"\begin{itemize}")
+		for cls in sorted(classes):
+			latex.append(r"\item{}\identifier{%s}\\" % cls.replace('_', r'\_'))
+			latex.append("\t%s\\\\" % classes[cls])
 		latex.append(r"\end{itemize}")
 
 
@@ -219,12 +359,12 @@ def main():
 
 	args = parser.parse_args()
 
-	packages, modules = [], []
+	packages, modules = [], {}
 	for path in args.PATH:
 		if not os.path.exists(path):
 			print("File/Directory not found: '%s' attempting to continue..."%path, file=sys.stderr)
 		elif os.path.isfile(path):
-			modules.append(path)
+			modules[os.path.basename(path)] = path
 		elif os.path.isdir(path):
 			if not os.path.isabs(path):
 				path = os.path.abspath(path)
@@ -252,14 +392,14 @@ def main():
 
 	outputFiles = set()
 
-	for module in modules:
+	for module in sorted(modules):
 		try:
-			fname, output = handleFile(module)
+			fname, output = handleFile(modules[module])
 			#output = output.replace('_', r'\_')
 		except EOFError as e:
-			print(e, file=sys.stderr)
+			print(e, "(file: '%s'" % module, ')', file=sys.stderr)
 		except Exception as e:
-			print("Generic Error:", e, file=sys.stderr)
+			print("Generic Error in file '%s':" % module, e, file=sys.stderr)
 		else:
 			with open(os.path.join(outputDir, fname), 'w') as outfile:
 				outfile.write(output)
@@ -267,7 +407,7 @@ def main():
 			outputFiles.add(fname)
 
 	with open(os.path.join(outputDir, 'index.tex'), 'w') as idxfile:
-		idxfile.write('\n'.join(r'\input{"%s/%s"}' % (outputDir, outputFile) for outputFile in outputFiles))
+		idxfile.write('\n'.join(r'\input{"%s/%s"}' % (outputDir, outputFile) for outputFile in sorted(outputFiles)))
 
 	print("Done. Output in '%s' in files: " % outputDir)
 	for file in outputFiles:
