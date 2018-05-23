@@ -26,35 +26,18 @@ except subprocess.CalledProcessError:
 # Create the documentation class directory (if it does not already exist)
 try:
 	packagePath = os.path.join(texmfHome.stdout.decode().strip(), 'tex', 'latex', 'documentation')
-	os.makedirs(packagePath)
 
 # output couldn't be decoded
 except UnicodeDecodeError as e:
 	print("Corrupt output from kpsewhich: %s" % e)
 	exit(1)
 
-# Need to overwrite an existing installation
-except FileExistsError:
-	print("Warning! Overwriting an existing installation!", file=sys.stderr)
-	for item in os.listdir(packagePath):
-		try:
-			os.rm(os.path.join(packagePath, item))
-		except OSError as e:
-			# On Windows, this could be because the file is in use
-			# On other systems, this is most likely a permissions error.
-			print("Cannot write to package directory. (%s)" % e)
-
-
-# Generic failure to create the directory
+# Generic failure
 except OSError as e:
-	print("Failed to install documentation class. (%s)" % e)
+	print("Error locating texlive home config directory: (%s)" % e)
 	exit(2)
 
 here = os.path.abspath(os.path.dirname(__file__))
-
-with open(os.path.join(here, 'documentation.cls')) as docfile:
-	with open(os.path.join(packagePath, 'documentation.cls'), 'w') as outputfile:
-		outputfile.write(docfile.read())
 
 # Get the long description from the README file
 with codecs.open(os.path.join(here, 'README.rst'), encoding='utf-8') as f:
@@ -213,7 +196,7 @@ setup(
 	# http://docs.python.org/3.4/distutils/setupscript.html#installing-additional-files
 	#
 	# In this case, 'data_file' will be installed into '<sys.prefix>/my_data'
-	data_files=[(packagePath, ['documentation.cls'])],  # Optional
+	data_files=[(os.path.join(packagePath, 'documentation.cls'), ['documentation.cls'])],  # Optional
 
 	# To provide executable scripts, use entry points in preference to the
 	# "scripts" keyword. Entry points provide cross-platform support and allow
